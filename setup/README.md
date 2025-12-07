@@ -23,7 +23,7 @@ ansible-playbook setup.yml --ask-become-pass
 ```
 
 ```bash
-brew install lazydocker lazygit gopass lf eza
+brew install lazydocker lazygit gopass lf eza btop
 ```
 
 ## arch
@@ -38,4 +38,10 @@ pacman -S --needed git base-devel
 git clone https://aur.archlinux.org/yay.git
 cd yay
 makepkg -si
+```
+
+## common
+
+```bash
+curl https://mise.run | sh
 ```
