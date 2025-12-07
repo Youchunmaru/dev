@@ -1,0 +1,133 @@
+---
+- name: Setup
+  hosts: localhost
+  connection: local
+  gather_facts: yes  # Required to detect OS (Arch/Debian/RedHat)
+  
+  vars:
+    # --- 1. USER CONFIGURATION ---
+    # Ansible automatically detects your home dir as 'ansible_user_dir'
+    folders:
+      - "{{ ansible_user_dir }}/Development"
+
+    # List of tools to install. 
+    # Note: These names are generally consistent across distros.
+    packages_common:
+      - git
+      - unzip
+      - ripgrep
+      - neovim
+    
+    packages_debian:
+      - fd-find
+      - build-essential
+      - docker.io
+      - docker-compose
+      - pgcli
+      - mycli
+      - timewarrior
+
+    packages_arch:
+      - fd
+      - base-devel
+      - docker
+      - docker-compose
+      - timew
+      - fastfetch
+      - gopass
+      - lf
+      - eza
+      - lazygit
+
+    # Static aliases that don't change between OSs
+    aliases:
+      - { name: "ll", command: "eza -l" }
+      - { name: "ls", command: "eza -a" }
+      - { name: "gs", command: "git status" }
+
+  tasks:
+    # --- 2. DYNAMIC OS CONFIGURATION ---
+    # We set the 'update_cmd' variable based on which OS is detected.
+    
+    - name: Configure for Debian/Ubuntu
+      set_fact:
+        update_cmd: "sudo apt update && sudo apt upgrade -y"
+      when: ansible_os_family == "Debian"
+
+    - name: Configure for Fedora/RedHat
+      set_fact:
+        update_cmd: "sudo dnf upgrade -y"
+      when: ansible_os_family == "RedHat"
+
+    - name: Configure for Arch Linux
+      set_fact:
+        update_cmd: "sudo pacman -Syu --noconfirm"
+      when: ansible_os_family == "Archlinux"
+
+    # --- 3. EXECUTION ---
+
+    - name: Create directory structure
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop: "{{ folders }}"
+      # We do NOT use 'become: yes' here because we want to own these folders, not root.
+
+    - name: Install Common Packages
+      package:
+        name: "{{ packages_common }}"
+        state: present
+      become: yes  # Escalate to root (sudo) only for this task!
+      
+    - name: Install Debian Specifics
+      package:
+        name: "{{ packages_debian }}"
+        state: present
+      become: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install Arch Specifics
+      package:
+        name: "{{ packages_arch }}"
+        state: present
+      become: yes
+      when: ansible_os_family == "Archlinux"
+
+
+      # NOTE ON PREREQUISITES:
+      # Ansible's 'package' module interacts directly with apt/dnf/pacman.
+      # If 'git' requires 'curl', the package manager handles it automatically.
+
+    - name: Add standard aliases to .bashrc
+      lineinfile:
+        path: "{{ ansible_user_dir }}/.bashrc"
+        line: "alias {{ item.name }}='{{ item.command }}'"
+        regexp: "^alias {{ item.name }}=" # Regex ensures we don't add duplicates
+        create: yes
+      loop: "{{ aliases }}"
+
+    - name: Add OS-specific update alias to .bashrc
+      lineinfile:
+        path: "{{ ansible_user_dir }}/.bashrc"
+        line: "alias update='{{ update_cmd }}'"
+        regexp: "^alias update="
+        create: yes
+      when: update_cmd is defined
+
+    - name: Ensure .config folder exists
+      file:
+        path: "{{ ansible_user_dir }}/.config"
+        state: directory
+        mode: '0755'
+
+    - name: Clone my Neovim Config
+      git:
+        repo: 'https://github.com/youchunmaru/nvim.git'
+        dest: "{{ ansible_user_dir }}/.config/nvim"
+        update: yes
+        version: master
+
+    - name: Final Message
+      debug:
+        msg: "Setup complete on {{ ansible_distribution }}! Run 'source ~/.bashrc' to finish."
